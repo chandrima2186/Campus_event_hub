@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusEventHub</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background: #0f172a;
+  color: white;
+}
+
+h1 {
+  text-align: center;
+  color: #60a5fa;
+}
+
+nav {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+nav button {
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #1e293b;
+  color: white;
+  cursor: pointer;
+}
+
+.section {
+  display: none;
+  padding: 20px;
+}
+
+input, select {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 8px;
+  border: none;
+  background: #1f2937;
+  color: white;
+}
+
+button {
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: #3b82f6;
+  color: white;
+  cursor: pointer;
+  margin: 5px 0;
+}
+
+.event-card {
+  background: #1f2937;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>CampusEventHub</h1>
+
+<nav>
+<button onclick="show('login')">Login</button>
+<button onclick="show('register')">Register</button>
+<button onclick="show('events')">Events</button>
+<button onclick="show('myEvents')">My Events</button>
+<button onclick="showAdmin()">Admin</button>
+<button onclick="logout()">Logout</button>
+</nav>
+
+<!-- LOGIN -->
+<div id="login" class="section">
+<h2>Login</h2>
+<input id="loginEmail" placeholder="Email">
+<input id="loginPassword" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
+</div>
+
+<!-- REGISTER -->
+<div id="register" class="section">
+<h2>Register</h2>
+<input id="regName" placeholder="Name">
+<input id="regEmail" placeholder="Email">
+<input id="regPassword" type="password" placeholder="Password">
+<button onclick="register()">Register</button>
+</div>
+
+<!-- EVENTS -->
+<div id="events" class="section">
+<h2>Events</h2>
+
+<input id="search" placeholder="Search title..." oninput="filter()">
+
+<select id="category" onchange="filter()">
+<option value="">All</option>
+</select>
+
+<input type="date" id="date" onchange="filter()">
+
+<div id="eventsBox"></div>
+</div>
+
+<!-- MY EVENTS -->
+<div id="myEvents" class="section">
+<h2>My Events</h2>
+<div id="myBox"></div>
+</div>
+
+<!-- ADMIN -->
+<div id="admin" class="section">
+<h2>Admin Panel</h2>
+
+<input id="title" placeholder="Title">
+<input id="desc" placeholder="Description">
+<input id="dateInput" type="datetime-local">
+<input id="location" placeholder="Location">
+
+<input id="editId" placeholder="Event ID for update">
+
+<button onclick="addEvent()">Add</button>
+<button onclick="updateEvent()">Update</button>
+
+<h3>All Events</h3>
+<div id="adminBox"></div>
+
+<h3>Approvals</h3>
+<div id="approveBox"></div>
+</div>
+
+<script>
+
+const BASE_URL = "http://localhost:3000";
+let all = [];
+
+/* NAV */
+function show(id){
+document.querySelectorAll('.section').forEach(e=>e.style.display='none');
+document.getElementById(id).style.display='block';
+
+if(id==='events') loadEvents();
+if(id==='myEvents') loadMy();
+}
+
+/* LOGIN */
+async function login(){
+const res = await fetch(BASE_URL+'/login',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+email:loginEmail.value,
+password:loginPassword.value
+})
+});
+
+const data = await res.json();
+
+if(data.user){
+localStorage.setItem('user',JSON.stringify(data.user));
+alert("Login success");
+show('events');
+}
+else alert(data.message);
+}
+
+/* REGISTER */
+async function register(){
+await fetch(BASE_URL+'/register',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+name:regName.value,
+email:regEmail.value,
+password:regPassword.value
+})
+});
+
+alert("Registered");
+show('login');
+}
+
+/* EVENTS */
+async function loadEvents(){
+const res = await fetch(BASE_URL+'/events');
+all = await res.json();
+
+render(all);
+loadCategory();
+}
+
+function render(data){
+eventsBox.innerHTML = data.map(e=>`
+<div class="event-card">
+<h3>${e.title}</h3>
+<p>${e.description}</p>
+<button onclick="registerEvent(${e.event_id})">Register</button>
+<button onclick="view(${e.event_id})">Details</button>
+</div>
+`).join('');
+}
+
+/* FILTER */
+function filter(){
+let f = all;
+
+if(search.value){
+f = f.filter(e=>e.title.toLowerCase().includes(search.value.toLowerCase()));
+}
+if(category.value){
+f = f.filter(e=>String(e.category_id)==category.value);
+}
+if(date.value){
+f = f.filter(e=>e.date.includes(date.value));
+}
+
+render(f);
+}
+
+/* CATEGORY */
+async function loadCategory(){
+const res = await fetch(BASE_URL+'/categories');
+const data = await res.json();
+
+category.innerHTML = `<option value="">All</option>` +
+data.map(c=>`<option value="${c.category_id}">${c.name}</option>`).join('');
+}
+
+/* DETAILS */
+async function view(id){
+const res = await fetch(BASE_URL+'/event/'+id);
+const d = await res.json();
+
+alert(`${d.title}\n${d.description}\n${d.date}`);
+}
+
+/* REGISTER */
+async function registerEvent(id){
+const u = JSON.parse(localStorage.getItem('user'));
+if(!u) return alert("Login first");
+
+await fetch(BASE_URL+'/register-event',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({user_id:u.user_id,event_id:id})
+});
+
+alert("Registered");
+}
+
+/* MY EVENTS */
+async function loadMy(){
+const u = JSON.parse(localStorage.getItem('user'));
+if(!u) return;
+
+const res = await fetch(BASE_URL+'/my-events/'+u.user_id);
+const data = await res.json();
+
+myBox.innerHTML = data.map(e=>`
+<div class="event-card">
+<h3>${e.title}</h3>
+<p>Status: ${e.status || "pending"}</p>
+</div>
+`).join('');
+}
+
+/* ADMIN */
+function showAdmin(){
+const u = JSON.parse(localStorage.getItem('user'));
+
+if(u && u.role==='admin'){
+show('admin');
+loadAdmin();
+loadApprovals();
+}
+else alert("Admin only");
+}
+
+/* ADMIN EVENTS */
+async function loadAdmin(){
+const res = await fetch(BASE_URL+'/events');
+const data = await res.json();
+
+adminBox.innerHTML = data.map(e=>`
+<div class="event-card">
+<h3>${e.title}</h3>
+<button onclick="del(${e.event_id})">Delete</button>
+</div>
+`).join('');
+}
+
+/* ADD */
+async function addEvent(){
+const u = JSON.parse(localStorage.getItem('user'));
+
+await fetch(BASE_URL+'/admin/events',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+title:title.value,
+description:desc.value,
+date:dateInput.value,
+location:location.value,
+category_id:1,
+user:u
+})
+});
+
+loadAdmin();
+}
+
+/* UPDATE */
+async function updateEvent(){
+const u = JSON.parse(localStorage.getItem('user'));
+
+await fetch(BASE_URL+'/admin/events/'+editId.value,{
+method:'PUT',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+title:title.value,
+description:desc.value,
+date:dateInput.value,
+location:location.value,
+category_id:1,
+user:u
+})
+});
+
+alert("Updated");
+loadAdmin();
+}
+
+/* DELETE */
+async function del(id){
+const u = JSON.parse(localStorage.getItem('user'));
+
+await fetch(BASE_URL+'/admin/events/'+id,{
+method:'DELETE',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({user:u})
+});
+
+loadAdmin();
+}
+
+/* APPROVAL LIST (simple demo) */
+async function loadApprovals(){
+const res = await fetch(BASE_URL+'/events');
+const data = await res.json();
+
+approveBox.innerHTML = data.map(e=>`
+<div class="event-card">
+<h3>${e.title}</h3>
+<button onclick="approve(${e.event_id})">Approve</button>
+<button onclick="reject(${e.event_id})">Reject</button>
+</div>
+`).join('');
+}
+
+async function approve(id){
+const u = JSON.parse(localStorage.getItem('user'));
+
+await fetch(BASE_URL+'/admin/approve/'+id,{
+method:'PUT',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({user:u})
+});
+
+alert("Approved");
+}
+
+async function reject(id){
+const u = JSON.parse(localStorage.getItem('user'));
+
+await fetch(BASE_URL+'/admin/reject/'+id,{
+method:'PUT',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({user:u})
+});
+
+alert("Rejected");
+}
+
+/* LOGOUT */
+function logout(){
+localStorage.removeItem('user');
+alert("Logged out");
+}
+
+show('login');
+
+</script>
+
+</body>
+</html>
